@@ -1,7 +1,7 @@
 ---
 title: 'ESM 244 Winter 2022: Lab 7 Key'
 subtitle: 'Wrangling & visualizing spatial data'
-author: "Allison Horst, Casey O'Hara"
+author: "Sophia Leiker"
 date: "2/16/2022"
 output: html_document
 ---
@@ -50,7 +50,7 @@ ca_counties_sf <- read_sf(here("data", "ca_counties", "CA_Counties_TIGER2016.shp
 
 #### Do a bit of wrangling (and see sticky geometry!)
 
-Use `View(ca_counties)` to check out what it contains. Let's simplify it by only keeping two attributes: NAME (county name) and ALAND (land area), then renaming those to `county_name` and `land_area`. 
+Use `View(ca_counties)` to check out what it contains. Let's simplify it by only keeping two attributes: NAME (county name) and ALAND (land area), then renaming those to `county_name` and `land_area`. (The geomerty is always going to stick with the rows) 
 
 ```{r}
 ca_subset_sf <- ca_counties_sf %>% 
@@ -87,12 +87,14 @@ Plot the California counties using `geom_sf()`. Notice that we can update aesthe
 ```{r}
 ggplot(data = ca_subset_sf) +
   geom_sf(aes(fill = land_area), color = "white", size = 0.1) +
-  theme_void() +
+  theme_void() + #this gets rid of the background
   scale_fill_gradientn(colors = c("cyan","blue","purple"))
 ```
 
 
 #### Notice what aesthetics we *didn't* have to specify here?
+
+- We didn't put x and y in the aes --> since it is in sf, it automatically looks for the geom column in order to spit out the output
 
 
 
@@ -103,6 +105,7 @@ Red sesbania (*Sesbania punicea*) is an invasive plant (see more information fro
 The data exist in `data/red_sesbania`, and the shapefile is stored as `ds80.shp`. Let's read in the data: 
 
 ```{r}
+#this is pulling in data that is in the form of points 
 sesbania_sf <- read_sf(here("data","red_sesbania","ds80.shp")) %>%
   janitor::clean_names()
 
@@ -114,9 +117,9 @@ sesbania_sf %>% raster::crs()
 Notice that this CRS is different from the California counties CRS, so we'll want to update it to match. Use `st_transform()` to update the CRS:
 
 ```{r}
-### if you know the EPSG code:
+### if you know the EPSG code (this is transforming the data frame using digits for new cordinate reference system)
 sesbania_3857_sf <- st_transform(sesbania_sf, 3857)
-### if you don't know the EPSG code:
+### if you don't know the EPSG code (this is transforming the sesbania_sf crs to match the the ca_coutries_sf dataset)
 sesbania_3857_2_sf <- st_transform(sesbania_sf, st_crs(ca_counties_sf))
 
 # Then check it: 
@@ -131,7 +134,7 @@ Note: this may take a minute.  Remember, later geoms go on top.
 ```{r}
 ggplot() +
   geom_sf(data = ca_subset_sf) +
-  geom_sf(data = sesbania_3857_sf, size = 1, color = "red")
+  geom_sf(data = sesbania_3857_sf, size = 1, color = "red") #this is printing the points!
 ```
 
 
@@ -150,7 +153,7 @@ And then we can find counts (note: these are not counts for individual plants, b
 ```{r}
 sesb_counts_sf <- ca_sesb_sf %>% 
   group_by(county_name) %>%
-  summarize(n_records = sum(!is.na(id)))
+  summarize(n_records = sum(!is.na(id))) #this is smashing down the data set so it counts up how many rows are present and do not have NAs, if they all have NAs those will be ranked as 0, if there is 5 rows with actual info then that row will be defined with an n_record as 5
 
 head(sesb_counts_sf)
 ```
@@ -190,9 +193,10 @@ tmap_mode(mode = "view")
 
 # Then make a map (with the polygon fill color updated by variable 'land_area', updating the color palette to "BuGn"), then add another shape layer for the sesbania records (added as dots):
 tm_shape(ca_subset_sf) +
-  tm_fill("land_area", palette = "BuGn") +
+  tm_fill("land_area", palette = "BuGn") + #filling based on landarea 
+  tm_borders(col = "black") +
   tm_shape(sesbania_sf) +
-  tm_dots()
+  tm_dots() 
 ```
 See *all* kinds of other cool ways you can update your interactive tmaps. 
 
