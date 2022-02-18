@@ -1,6 +1,6 @@
 ---
 title: 'ESM 244 Lab 7 Part 2: Spatial kriging'
-author: "Allison Horst, Casey O'Hara"
+author: "Sophia Leiker"
 date: "2/16/2022"
 output: html_document
 ---
@@ -29,7 +29,7 @@ ca_counties_sf <- read_sf(here("data/ca_counties"), layer = "CA_Counties_TIGER20
   select(name)
 
 # Check the projection
-st_crs(ca_counties_sf)
+st_crs(ca_counties_sf) #WGS 84
 
 # Read in the depth to groundwater layer: 
 ca_dgw_sf <- read_sf(here("data/ca_dgw/F2013_DBGS_Points_20150720_093252.gpkg")) %>% 
@@ -68,7 +68,7 @@ sj_county_sf <- ca_counties_sf %>%
 
 # Now keep observations for groundwater depth within that county:
 sj_depth_sf <- ca_dgw_sf %>% 
-  st_intersection(sj_county_sf)
+  st_intersection(sj_county_sf) #we should do biodiversity by country, so you use this intersection tool as what you feed in for a drop down menu and then it will spit out a map with the public lands vector/biodiveristy raster/land cover raster/output raster 
 
 # Make a quick plot of those: 
 ggplot() +
@@ -84,7 +84,7 @@ Interpolation chokes when observations at identical location - spatial singulari
 
 ```{r}
 well_duplicates <- sj_depth_sf %>% 
-  janitor::get_dupes(latitude, longitude)
+  janitor::get_dupes(latitude, longitude) #this gets the duplicates from latitude and longitude columns (if they are both simultanously duplicated)
 
 well_duplicates
 
@@ -105,13 +105,14 @@ sj_depth_sf %>%
 ```{r}
 # Create the variogram
 sj_dgw_vgm <- gstat::variogram(dgbs ~ 1, data = sj_depth_sf)
+#dgbs as a function of 1, this is calculating an intercept as the mean based on the data, this is like ordinary kriging, this is a constant mean but we do not know what the constant is
 
 # Plot it
 plot(sj_dgw_vgm) # Looks variogramish! Increasing variance as observations get further apart. Let's model this...
 
 # Now create the variogram model, & see ?vgm for other model options: 
 sj_dgw_vgm_fit <- fit.variogram(sj_dgw_vgm, 
-                                model = vgm(model = "Gau")) ### default starting
+                                model = vgm(model = "Gau")) ### default starting (there are other models such as sperical, how would one select a certain model to use and does it influence outputs significantly?)
 sj_dgw_vgm_fit <- fit.variogram(sj_dgw_vgm, 
                                 model = vgm(model = "Gau", ### (leave with defaults first)
                                             nugget = 20, sill = 3000, range = 30000))
@@ -129,10 +130,10 @@ attr(sj_dgw_vgm_fit, 'SSErr') # ...and you could compare to other models...
 ```{r}
 
 # Make a grid over which we'll krige: 
-sj_grid <- st_bbox(sj_county_sf) %>%
-  st_as_stars(dx = 1000, dy = 1000) %>%
-  st_set_crs(st_crs(sj_county_sf)) %>%
-  st_crop(sj_county_sf)
+sj_grid <- st_bbox(sj_county_sf) %>% #this is creating a bounding box to capture the box
+  st_as_stars(dx = 1000, dy = 1000) %>% #using this to set up a grid, 1000m X 1000x (like a fishnet in Arc) 
+  st_set_crs(st_crs(sj_county_sf)) %>% #this is setting the crs to match the sj_county_sf
+  st_crop(sj_county_sf) #this is cropping the grid so it only includes points within the outline of this polygon
 
 sj_grid
 
@@ -141,20 +142,21 @@ plot(sj_grid)
 
 # Perform ordinary kriging: 
 sj_dgw_krige <- krige(dgbs ~ 1, sj_depth_sf, sj_grid, model = sj_dgw_vgm_fit)
+#this sj_depth_sf is the points, sj_grid is the grid we are using, the model we are using the variogram model fit that we created above
 
 # Initial plot of kriging outcome: 
 plot(sj_dgw_krige)
 
 # Convert it to a spatial data frame
 krige_df <- as.data.frame(sj_dgw_krige) %>% 
-  st_as_sf(coords = c("x","y")) %>% 
-  drop_na(var1.pred)
+  st_as_sf(coords = c("x","y")) %>% #this is a function that converts things to a simple features object
+  drop_na(var1.pred) #check to make sure this works by running class(krige_df) and it should be a sf (simple features object)
 
 st_crs(krige_df) <- 3857
 
 # Then we can use ggplot: 
 ggplot(data = krige_df) +
-  geom_sf(aes(color = var1.pred)) +
+  geom_sf(aes(color = var1.pred)) + #color is predicted value
   scale_color_gradient(low = "blue", high = "yellow")
 ```
 
